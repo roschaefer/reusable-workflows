@@ -19,14 +19,6 @@ on:
         description: "Install fava (pip) before running checks"
         type: boolean
         default: false
-      hledger_version:
-        description: "hledger version to install when needs_hledger is true"
-        type: string
-        default: "1.52.1"
-      build_command:
-        description: "Command used to build the release binary"
-        type: string
-        default: "just build"
 
 jobs:
   check:
@@ -35,7 +27,7 @@ jobs:
         os: ${{ inputs.release && fromJSON('["ubuntu-latest","macos-latest"]') || fromJSON('["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     env:
-      HLEDGER_VERSION: ${{ inputs.hledger_version }}
+      HLEDGER_VERSION: "1.52.1"
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -97,7 +89,7 @@ jobs:
 
       - name: Build release binary
         if: inputs.release
-        run: ${{ inputs.build_command }}
+        run: just build
 
       - name: Run tests
         run: just test

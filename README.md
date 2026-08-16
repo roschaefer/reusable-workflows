@@ -8,6 +8,10 @@ markdown-to-cucumber, ...).
 
 Build/lint/test a Rust crate, optionally producing linux/macos release
 binaries and publishing a rolling `latest` GitHub release on push to `main`.
+Builds run `just build`, and hledger (when `needs_hledger` is set) is
+always pinned to the same version (currently 1.52.1, hardcoded in the
+workflow) — both are fixed on purpose so every caller stays in lockstep;
+bump them in this repo, not per-caller.
 
 ```yaml
 jobs:
@@ -18,8 +22,6 @@ jobs:
       needs_hledger: true   # default: false
       needs_fava: true      # default: false
       # release: true        # default: true — set false for tools with no release binary
-      # build_command: cargo build --release   # default: just build
-      # hledger_version: "1.52.1"               # default shown
     secrets: inherit
 ```
 
