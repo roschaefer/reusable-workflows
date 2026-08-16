@@ -24,7 +24,10 @@ jobs:
   check:
     strategy:
       matrix:
-        os: ${{ inputs.release && fromJSON('["ubuntu-latest","macos-latest"]') || fromJSON('["ubuntu-latest"]') }}
+        include: >-
+          ${{ inputs.release
+            && fromJSON(format('[{{"os":"ubuntu-latest","asset_name":"{0}-linux-x86_64"}},{{"os":"macos-latest","asset_name":"{0}-macos-arm64"}}]', inputs.binary_name))
+            || fromJSON('[{"os":"ubuntu-latest"}]') }}
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -49,16 +52,6 @@ jobs:
         uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
         with:
           tool: cargo-audit,cargo-machete
-
-      - name: Determine release asset name
-        if: inputs.release
-        id: asset
-        run: |
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            echo "name=${{ inputs.binary_name }}-macos-arm64" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${{ inputs.binary_name }}-linux-x86_64" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Install hledger (Linux)
         if: inputs.needs_hledger && runner.os == 'Linux'
@@ -98,14 +91,14 @@ jobs:
 
       - name: Copy release binary
         if: inputs.release
-        run: cp target/release/${{ inputs.binary_name }} ${{ steps.asset.outputs.name }}
+        run: cp target/release/${{ inputs.binary_name }} ${{ matrix.asset_name }}
 
       - name: Upload binary
         if: inputs.release
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: ${{ steps.asset.outputs.name }}
-          path: ${{ steps.asset.outputs.name }}
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
 
   release:
     needs: check
