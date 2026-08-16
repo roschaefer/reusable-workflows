@@ -7,12 +7,14 @@ on:
         description: "Crate binary name, used to name release assets"
         type: string
         required: true
-      os_list:
+      platforms:
         description: >-
-          JSON array of runner labels to build/test/release on, e.g.
-          '["ubuntu-latest","macos-latest"]'. Empty ('[]', the default)
+          JSON array of target platforms to build/test/release on, e.g.
+          '["linux-x86_64","macos-arm64"]'. Empty ('[]', the default)
           runs a single non-matrixed check job on ubuntu-latest and skips
-          the release job. Supported labels: ubuntu-latest, macos-latest.
+          the release job. Supported values: linux-x86_64, macos-arm64
+          (the only GitHub-hosted runners in use here — extend the
+          runs-on lookup below to add more).
         type: string
         default: "[]"
       needs_hledger:
@@ -28,11 +30,12 @@ jobs:
   check:
     strategy:
       matrix:
-        os: ${{ fromJSON(inputs.os_list != '[]' && inputs.os_list || '["ubuntu-latest"]') }}
+        platform: ${{ fromJSON(inputs.platforms != '[]' && inputs.platforms || '[""]') }}
     name: >-
-      ${{ inputs.os_list == '[]' && 'check'
-        || format('check-{0}', fromJSON('{"ubuntu-latest":"linux-x86_64","macos-latest":"macos-arm64"}')[matrix.os]) }}
-    runs-on: ${{ matrix.os }}
+      ${{ inputs.platforms == '[]' && 'check' || format('check-{0}', matrix.platform) }}
+    runs-on: >-
+      ${{ inputs.platforms == '[]' && 'ubuntu-latest'
+        || fromJSON('{"linux-x86_64":"ubuntu-latest","macos-arm64":"macos-latest"}')[matrix.platform] }}
     permissions:
       contents: read
     env:
@@ -58,10 +61,9 @@ jobs:
           tool: cargo-audit,cargo-machete
 
       - name: Determine release asset name
-        if: inputs.os_list != '[]'
+        if: inputs.platforms != '[]'
         id: asset
-        run: |
-          echo "name=${{ inputs.binary_name }}-${{ fromJSON('{"ubuntu-latest":"linux-x86_64","macos-latest":"macos-arm64"}')[matrix.os] }}" >> "$GITHUB_OUTPUT"
+        run: echo "name=${{ inputs.binary_name }}-${{ matrix.platform }}" >> "$GITHUB_OUTPUT"
 
       - name: Install hledger (Linux)
         if: inputs.needs_hledger && runner.os == 'Linux'
@@ -93,18 +95,18 @@ jobs:
         run: just audit
 
       - name: Build release binary
-        if: inputs.os_list != '[]'
+        if: inputs.platforms != '[]'
         run: just build
 
       - name: Run tests
         run: just test
 
       - name: Copy release binary
-        if: inputs.os_list != '[]'
+        if: inputs.platforms != '[]'
         run: cp target/release/${{ inputs.binary_name }} ${{ steps.asset.outputs.name }}
 
       - name: Upload binary
-        if: inputs.os_list != '[]'
+        if: inputs.platforms != '[]'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ steps.asset.outputs.name }}
@@ -112,7 +114,7 @@ jobs:
 
   release:
     needs: check
-    if: inputs.os_list != '[]' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: inputs.platforms != '[]' && github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write

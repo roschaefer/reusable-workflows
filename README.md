@@ -13,15 +13,23 @@ always pinned to the same version (currently 1.52.1, hardcoded in the
 workflow) — both are fixed on purpose so every caller stays in lockstep;
 bump them in this repo, not per-caller.
 
-`os_list` controls both the check job's shape and whether the release job
+`platforms` controls both the check job's shape and whether the release job
 runs. Empty (`'[]'`, the default) means: one non-matrixed check job on
 ubuntu-latest, named exactly `check`, no release job — for tools with no
-release binary. A non-empty JSON array (currently only
-`'["ubuntu-latest","macos-latest"]'` is supported, since asset-name and
-release-job logic hardcode that pair) matrixes the check job per OS,
-each named `check-<os-and-arch>` (e.g. `check-linux-x86_64`,
-`check-macos-arm64` — a fixed lookup table in the workflow, not derived
-from `binary_name`), and enables the release job.
+release binary. A non-empty JSON array of platform names (currently only
+`linux-x86_64` and `macos-arm64` are supported) matrixes the check job per
+platform, each named `check-<platform>` (e.g. `check-linux-x86_64`,
+`check-macos-arm64`) and used verbatim as the release asset suffix
+(`<binary_name>-<platform>`), and enables the release job.
+
+`platforms` values are descriptive names, not GitHub Actions runner
+labels — the only place that distinction matters is `runs-on:`, which
+looks the runner label up from a small fixed map
+(`{"linux-x86_64":"ubuntu-latest","macos-arm64":"macos-latest"}`). That's
+the only lookup in the whole workflow: job names and asset names use the
+caller's `platforms` value directly, so `platforms` is the one label
+callers, job names, and release assets all agree on. Add a platform by
+adding one entry to that map — nothing else needs to change.
 
 The job's explicit `name:` is what makes the bare `check` case possible —
 GitHub only auto-appends matrix values to a job's status-check name when
@@ -34,7 +42,7 @@ jobs:
     uses: roschaefer/reusable-workflows/.github/workflows/rust-ci.yml@<commit-sha> # main
     with:
       binary_name: hledger-document-check
-      os_list: '["ubuntu-latest","macos-latest"]'  # default: '[]' (no release)
+      platforms: '["linux-x86_64","macos-arm64"]'  # default: '[]' (no release)
       needs_hledger: true   # default: false
       needs_fava: true      # default: false
 ```
