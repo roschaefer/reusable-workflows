@@ -1,0 +1,149 @@
+name: Rust CI
+
+on:
+  workflow_call:
+    inputs:
+      binary_name:
+        description: "Crate binary name, used to name release assets"
+        type: string
+        required: true
+      release:
+        description: "Build linux/macos release binaries and publish a rolling 'latest' release on push to main"
+        type: boolean
+        default: true
+      needs_hledger:
+        description: "Install hledger before running checks"
+        type: boolean
+        default: false
+      needs_fava:
+        description: "Install fava (pip) before running checks"
+        type: boolean
+        default: false
+      hledger_version:
+        description: "hledger version to install when needs_hledger is true"
+        type: string
+        default: "1.52.1"
+      build_command:
+        description: "Command used to build the release binary"
+        type: string
+        default: "just build"
+
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: ${{ inputs.release && fromJSON('["ubuntu-latest","macos-latest"]') || fromJSON('["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    env:
+      HLEDGER_VERSION: ${{ inputs.hledger_version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+
+      - name: Install cargo-audit and cargo-machete
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
+        with:
+          tool: cargo-audit,cargo-machete
+
+      - name: Determine release asset name
+        if: inputs.release
+        id: asset
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            echo "name=${{ inputs.binary_name }}-macos-arm64" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ inputs.binary_name }}-linux-x86_64" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install hledger (Linux)
+        if: inputs.needs_hledger && runner.os == 'Linux'
+        run: |
+          curl -fL "https://github.com/simonmichael/hledger/releases/download/${HLEDGER_VERSION}/hledger-linux-x64.tar.gz" \
+            | sudo tar -xz -f- -C /usr/local/bin hledger
+          hledger --version
+
+      - name: Install hledger (macOS)
+        if: inputs.needs_hledger && runner.os == 'macOS'
+        run: |
+          brew install hledger
+          hledger --version
+
+      - name: Install fava
+        if: inputs.needs_fava
+        run: pip install fava
+
+      - name: Check formatting
+        run: just fmt-check
+
+      - name: Lint
+        run: just clippy
+
+      - name: Check for unused dependencies
+        run: just machete
+
+      - name: Security audit
+        run: just audit
+
+      - name: Build release binary
+        if: inputs.release
+        run: ${{ inputs.build_command }}
+
+      - name: Run tests
+        run: just test
+
+      - name: Copy release binary
+        if: inputs.release
+        run: cp target/release/${{ inputs.binary_name }} ${{ steps.asset.outputs.name }}
+
+      - name: Upload binary
+        if: inputs.release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ steps.asset.outputs.name }}
+          path: ${{ steps.asset.outputs.name }}
+
+  release:
+    needs: check
+    if: inputs.release && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Download binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Get short commit hash
+        id: commit
+        run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Update latest release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHORT_SHA: ${{ steps.commit.outputs.short }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          git tag -f latest
+          git push origin latest --force
+          gh release create latest \
+            --title "Latest (rolling)" \
+            --notes "Built from commit ${SHORT_SHA} (${GITHUB_SHA})" \
+            --prerelease \
+            dist/${{ inputs.binary_name }}-linux-x86_64 \
+            dist/${{ inputs.binary_name }}-macos-arm64
