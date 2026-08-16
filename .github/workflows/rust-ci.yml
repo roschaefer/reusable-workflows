@@ -7,10 +7,14 @@ on:
         description: "Crate binary name, used to name release assets"
         type: string
         required: true
-      release:
-        description: "Build linux/macos release binaries and publish a rolling 'latest' release on push to main"
-        type: boolean
-        default: true
+      os_list:
+        description: >-
+          JSON array of runner labels to build/test/release on, e.g.
+          '["ubuntu-latest","macos-latest"]'. Empty ('[]', the default)
+          runs a single non-matrixed check job on ubuntu-latest and skips
+          the release job. Supported labels: ubuntu-latest, macos-latest.
+        type: string
+        default: "[]"
       needs_hledger:
         description: "Install hledger before running checks"
         type: boolean
@@ -24,10 +28,10 @@ jobs:
   check:
     strategy:
       matrix:
-        include: >-
-          ${{ inputs.release
-            && fromJSON(format('[{{"os":"ubuntu-latest","asset_name":"{0}-linux-x86_64"}},{{"os":"macos-latest","asset_name":"{0}-macos-arm64"}}]', inputs.binary_name))
-            || fromJSON('[{"os":"ubuntu-latest"}]') }}
+        os: ${{ fromJSON(inputs.os_list != '[]' && inputs.os_list || '["ubuntu-latest"]') }}
+    name: >-
+      ${{ inputs.os_list == '[]' && 'check'
+        || format('check-{0}', fromJSON('{"ubuntu-latest":"linux-x86_64","macos-latest":"macos-arm64"}')[matrix.os]) }}
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -52,6 +56,12 @@ jobs:
         uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2
         with:
           tool: cargo-audit,cargo-machete
+
+      - name: Determine release asset name
+        if: inputs.os_list != '[]'
+        id: asset
+        run: |
+          echo "name=${{ inputs.binary_name }}-${{ fromJSON('{"ubuntu-latest":"linux-x86_64","macos-latest":"macos-arm64"}')[matrix.os] }}" >> "$GITHUB_OUTPUT"
 
       - name: Install hledger (Linux)
         if: inputs.needs_hledger && runner.os == 'Linux'
@@ -83,26 +93,26 @@ jobs:
         run: just audit
 
       - name: Build release binary
-        if: inputs.release
+        if: inputs.os_list != '[]'
         run: just build
 
       - name: Run tests
         run: just test
 
       - name: Copy release binary
-        if: inputs.release
-        run: cp target/release/${{ inputs.binary_name }} ${{ matrix.asset_name }}
+        if: inputs.os_list != '[]'
+        run: cp target/release/${{ inputs.binary_name }} ${{ steps.asset.outputs.name }}
 
       - name: Upload binary
-        if: inputs.release
+        if: inputs.os_list != '[]'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: ${{ matrix.asset_name }}
-          path: ${{ matrix.asset_name }}
+          name: ${{ steps.asset.outputs.name }}
+          path: ${{ steps.asset.outputs.name }}
 
   release:
     needs: check
-    if: inputs.release && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: inputs.os_list != '[]' && github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -13,15 +13,30 @@ always pinned to the same version (currently 1.52.1, hardcoded in the
 workflow) — both are fixed on purpose so every caller stays in lockstep;
 bump them in this repo, not per-caller.
 
+`os_list` controls both the check job's shape and whether the release job
+runs. Empty (`'[]'`, the default) means: one non-matrixed check job on
+ubuntu-latest, named exactly `check`, no release job — for tools with no
+release binary. A non-empty JSON array (currently only
+`'["ubuntu-latest","macos-latest"]'` is supported, since asset-name and
+release-job logic hardcode that pair) matrixes the check job per OS,
+each named `check-<os-and-arch>` (e.g. `check-linux-x86_64`,
+`check-macos-arm64` — a fixed lookup table in the workflow, not derived
+from `binary_name`), and enables the release job.
+
+The job's explicit `name:` is what makes the bare `check` case possible —
+GitHub only auto-appends matrix values to a job's status-check name when
+the job doesn't set its own `name:`; setting one (even for a matrixed job)
+replaces the auto-generated name entirely instead of adding to it.
+
 ```yaml
 jobs:
   ci:
     uses: roschaefer/reusable-workflows/.github/workflows/rust-ci.yml@<commit-sha> # main
     with:
       binary_name: hledger-document-check
+      os_list: '["ubuntu-latest","macos-latest"]'  # default: '[]' (no release)
       needs_hledger: true   # default: false
       needs_fava: true      # default: false
-      # release: true        # default: true — set false for tools with no release binary
 ```
 
 ## pr-metadata.yml
