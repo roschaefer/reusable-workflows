@@ -26,6 +26,8 @@ jobs:
       matrix:
         os: ${{ inputs.release && fromJSON('["ubuntu-latest","macos-latest"]') || fromJSON('["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     env:
       HLEDGER_VERSION: "1.52.1"
     steps:
