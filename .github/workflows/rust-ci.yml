@@ -25,6 +25,10 @@ on:
         description: "Install fava (pip) before running checks"
         type: boolean
         default: false
+      needs_scrut:
+        description: "Run Scrut tests through the project's Nix development shell on Linux"
+        type: boolean
+        default: false
 
 jobs:
   check:
@@ -82,6 +86,14 @@ jobs:
         if: inputs.needs_fava
         run: pip install fava
 
+      - name: Install Nix
+        if: inputs.needs_scrut && runner.os == 'Linux'
+        uses: DeterminateSystems/nix-installer-action@2cb76beab460be7e44442c7ebdcbc30b638416df # main
+
+      - name: Cache Nix store
+        if: inputs.needs_scrut && runner.os == 'Linux'
+        uses: DeterminateSystems/magic-nix-cache-action@f69a2d3e148e90223fe63ab6e3f6331f2e7e33dc # main
+
       - name: Check formatting
         run: just fmt-check
 
@@ -100,6 +112,10 @@ jobs:
 
       - name: Run tests
         run: just test
+
+      - name: Run Scrut tests
+        if: inputs.needs_scrut && runner.os == 'Linux'
+        run: nix develop --command just test-scrut
 
       - name: Copy release binary
         if: inputs.platforms != '[]'

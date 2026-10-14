@@ -55,7 +55,14 @@ jobs:
       platforms: '["linux-x86_64","macos-arm64"]'  # default: '[]' (no release)
       needs_hledger: true   # default: false
       needs_fava: true      # default: false
+      needs_scrut: true     # default: false; runs on Linux through `nix develop`
 ```
+
+`needs_scrut` installs Nix in the existing Linux check job and runs
+`nix develop --command just test-scrut` after the regular tests. It does not run
+Scrut on macOS, avoiding duplicate behavior coverage and additional macOS
+runner minutes. The caller must include a Linux platform when `platforms` is
+non-empty and provide both `flake.nix` and a `test-scrut` Just recipe.
 
 ## Versioning
 
