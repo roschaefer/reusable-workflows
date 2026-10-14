@@ -26,7 +26,7 @@ on:
         type: boolean
         default: false
       needs_scrut:
-        description: "Run Scrut tests through the project's Nix development shell on Linux"
+        description: "Run Scrut tests on Linux with the scrut package from the project's flake"
         type: boolean
         default: false
 
@@ -115,7 +115,7 @@ jobs:
 
       - name: Run Scrut tests
         if: inputs.needs_scrut && runner.os == 'Linux'
-        run: nix develop --command just test-scrut
+        run: nix shell .#scrut --command just test-scrut
 
       - name: Copy release binary
         if: inputs.platforms != '[]'
