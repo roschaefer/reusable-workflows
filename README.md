@@ -55,7 +55,17 @@ jobs:
       platforms: '["linux-x86_64","macos-arm64"]'  # default: '[]' (no release)
       needs_hledger: true   # default: false
       needs_fava: true      # default: false
+      needs_scrut: true     # default: false; runs on Linux with the flake's `scrut`
 ```
+
+`needs_scrut` installs Nix in the existing Linux check job and runs
+`nix shell .#scrut --command just test-scrut` after the regular tests. Only
+Scrut comes from Nix: the build and the specifications use the same pinned
+Rust toolchain, `hledger`, and `fava` as the rest of the job, and reuse its
+`target/` cache. It does not run Scrut on macOS, avoiding duplicate behavior
+coverage and additional macOS runner minutes. The caller must include a Linux
+platform when `platforms` is non-empty and provide a `flake.nix` exposing
+`packages.<system>.scrut` and a `test-scrut` Just recipe.
 
 ## Versioning
 
