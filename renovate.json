@@ -3,7 +3,9 @@
 	"extends": ["config:recommended"],
 	"timezone": "Europe/Berlin",
 	"schedule": ["before 7am on Monday"],
-	"dependencyDashboard": true,
+	"dependencyDashboard": {
+		"enabled": true
+	},
 	"configMigration": true,
 	"labels": ["dependencies"],
 	"semanticCommits": "enabled",
